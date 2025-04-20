@@ -115,126 +115,156 @@ export function RegisterForm() {
   }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-    >
-      <Card className="w-full max-w-md mx-auto">
-        <CardHeader>
-          <CardTitle className="text-2xl text-center">
-            Create an Account
-          </CardTitle>
-          <CardDescription className="text-center">
-            Sign up to get started with our application
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="firstName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>First Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="John" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="lastName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Last Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Doe" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email</FormLabel>
-                    <FormControl>
-                      <Input placeholder="email@example.com" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="password"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Password</FormLabel>
-                    <FormControl>
+    <div className="w-full">
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+          <div className="grid grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="firstName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-foreground/80 font-medium">
+                    First Name
+                  </FormLabel>
+                  <FormControl>
+                    <div className="relative group">
                       <Input
-                        type="password"
-                        placeholder="••••••••"
+                        placeholder="John"
+                        className="h-11 px-4 bg-background/50 dark:bg-background/30 border-border/60 focus:border-primary/60 transition-all duration-200 rounded-lg"
                         {...field}
                       />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="confirmPassword"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Confirm Password</FormLabel>
-                    <FormControl>
+                      <div className="absolute inset-0 rounded-lg border border-primary/0 group-hover:border-primary/10 pointer-events-none transition-all duration-300"></div>
+                    </div>
+                  </FormControl>
+                  <FormMessage className="text-xs font-medium" />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="lastName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-foreground/80 font-medium">
+                    Last Name
+                  </FormLabel>
+                  <FormControl>
+                    <div className="relative group">
                       <Input
-                        type="password"
-                        placeholder="••••••••"
+                        placeholder="Doe"
+                        className="h-11 px-4 bg-background/50 dark:bg-background/30 border-border/60 focus:border-primary/60 transition-all duration-200 rounded-lg"
                         {...field}
                       />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Registering..." : "Register"}
-              </Button>
-            </form>
-          </Form>
-
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300"></div>
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-500">Or</span>
-            </div>
+                      <div className="absolute inset-0 rounded-lg border border-primary/0 group-hover:border-primary/10 pointer-events-none transition-all duration-300"></div>
+                    </div>
+                  </FormControl>
+                  <FormMessage className="text-xs font-medium" />
+                </FormItem>
+              )}
+            />
           </div>
 
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => router.push("/login")}
-          >
-            Already have an account? Login
-          </Button>
-        </CardContent>
-      </Card>
-    </motion.div>
+          <FormField
+            control={form.control}
+            name="email"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-foreground/80 font-medium">
+                  Email
+                </FormLabel>
+                <FormControl>
+                  <div className="relative group">
+                    <Input
+                      placeholder="email@example.com"
+                      className="h-11 px-4 bg-background/50 dark:bg-background/30 border-border/60 focus:border-primary/60 transition-all duration-200 rounded-lg"
+                      {...field}
+                    />
+                    <div className="absolute inset-0 rounded-lg border border-primary/0 group-hover:border-primary/10 pointer-events-none transition-all duration-300"></div>
+                  </div>
+                </FormControl>
+                <FormMessage className="text-xs font-medium" />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-foreground/80 font-medium">
+                  Password
+                </FormLabel>
+                <FormControl>
+                  <div className="relative group">
+                    <Input
+                      type="password"
+                      placeholder="••••••••"
+                      className="h-11 px-4 bg-background/50 dark:bg-background/30 border-border/60 focus:border-primary/60 transition-all duration-200 rounded-lg"
+                      {...field}
+                    />
+                    <div className="absolute inset-0 rounded-lg border border-primary/0 group-hover:border-primary/10 pointer-events-none transition-all duration-300"></div>
+                  </div>
+                </FormControl>
+                <FormMessage className="text-xs font-medium" />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="confirmPassword"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-foreground/80 font-medium">
+                  Confirm Password
+                </FormLabel>
+                <FormControl>
+                  <div className="relative group">
+                    <Input
+                      type="password"
+                      placeholder="••••••••"
+                      className="h-11 px-4 bg-background/50 dark:bg-background/30 border-border/60 focus:border-primary/60 transition-all duration-200 rounded-lg"
+                      {...field}
+                    />
+                    <div className="absolute inset-0 rounded-lg border border-primary/0 group-hover:border-primary/10 pointer-events-none transition-all duration-300"></div>
+                  </div>
+                </FormControl>
+                <FormMessage className="text-xs font-medium" />
+              </FormItem>
+            )}
+          />
+
+          <motion.div whileTap={{ scale: 0.98 }} className="pt-2">
+            <Button
+              type="submit"
+              className="w-full h-11 font-medium rounded-lg bg-primary hover:bg-primary/90 transition-all duration-200 shadow-[0_0_0_0_rgba(0,0,0,0)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)]"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <div className="flex items-center gap-2">
+                  <div className="h-4 w-4 rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground animate-spin"></div>
+                  <span>Creating account...</span>
+                </div>
+              ) : (
+                "Create Account"
+              )}
+            </Button>
+          </motion.div>
+
+          <div className="mt-6 text-center">
+            <Button
+              variant="link"
+              onClick={() => router.push("/login")}
+              className="text-sm font-medium text-muted-foreground hover:text-primary"
+            >
+              Already have an account?{" "}
+              <span className="text-primary font-medium ml-1">Sign in</span>
+            </Button>
+          </div>
+        </form>
+      </Form>
+    </div>
   );
 }
