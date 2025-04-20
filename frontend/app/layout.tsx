@@ -23,8 +23,8 @@ export default function RootLayout({
       <body className={inter.className} suppressHydrationWarning={true}>
         <ReactQueryProvider>
           <main className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
-            <Navbar />
-            <div className="pt-16">{children}</div>
+            {/* <Navbar /> */}
+            <div className="pt-0">{children}</div>
           </main>
           <ToasterProvider />
         </ReactQueryProvider>
