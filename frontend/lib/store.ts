@@ -8,6 +8,7 @@ interface User {
   first_name?: string;
   last_name?: string;
   is_verified: boolean;
+  oauth_provider?: string;
   roles: Array<{ name: string }>;
 }
 

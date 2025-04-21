@@ -7,13 +7,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Save, User, Mail, CheckCircle, XCircle } from "lucide-react";
+import { Save, CheckCircle, XCircle } from "lucide-react";
 
 import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -45,6 +44,37 @@ const profileFormSchema = z.object({
     .email({ message: "Please enter a valid email address" })
     .readonly(),
 });
+
+// ResendVerificationButton component
+function ResendVerificationButton() {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleResendVerification = async () => {
+    setIsLoading(true);
+    try {
+      await api.resendVerification();
+      toast.success("Verification email sent. Please check your inbox.");
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to resend verification email";
+      toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleResendVerification}
+      disabled={isLoading}
+      className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+    >
+      {isLoading ? "Sending..." : "Resend verification"}
+    </button>
+  );
+}
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 
@@ -102,8 +132,10 @@ export default function ProfilePage() {
       queryClient.invalidateQueries({ queryKey: ["protectedData"] });
       setIsEditing(false);
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.detail || "Failed to update profile");
+    onError: (error: unknown) => {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to update profile";
+      toast.error(errorMessage);
     },
   });
 
@@ -179,12 +211,15 @@ export default function ProfilePage() {
                           <CheckCircle className="h-3 w-3 mr-1" /> Verified
                         </Badge>
                       ) : (
-                        <Badge
-                          variant="destructive"
-                          className="bg-red-100 text-red-800"
-                        >
-                          <XCircle className="h-3 w-3 mr-1" /> Unverified
-                        </Badge>
+                        <div className="flex flex-col items-end">
+                          <Badge
+                            variant="destructive"
+                            className="bg-red-100 text-red-800 mb-1"
+                          >
+                            <XCircle className="h-3 w-3 mr-1" /> Unverified
+                          </Badge>
+                          <ResendVerificationButton />
+                        </div>
                       )}
                     </div>
 
@@ -327,6 +362,52 @@ export default function ProfilePage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <h3 className="text-lg font-medium">
+                        Email Verification
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        Verify your email address to protect your account
+                      </p>
+                      <div className="flex items-center space-x-2">
+                        {user?.is_verified ? (
+                          <div className="flex items-center">
+                            <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
+                            <span>Your email has been verified</span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col space-y-2">
+                            <div className="flex items-center">
+                              <XCircle className="h-5 w-5 text-red-500 mr-2" />
+                              <span>Your email is not verified</span>
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  await api.resendVerification();
+                                  toast.success(
+                                    "Verification email sent. Please check your inbox."
+                                  );
+                                } catch (error: unknown) {
+                                  const errorMessage =
+                                    error instanceof Error
+                                      ? error.message
+                                      : "Failed to resend verification email";
+                                  toast.error(errorMessage);
+                                }
+                              }}
+                            >
+                              Resend Verification Email
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <Separator />
+
                     <div className="space-y-2">
                       <h3 className="text-lg font-medium">Change Password</h3>
                       <p className="text-sm text-gray-500">

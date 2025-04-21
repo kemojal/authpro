@@ -11,11 +11,19 @@ except ImportError:
     field_validator = validator
     USE_PYDANTIC_V2 = False
 from passlib.context import CryptContext
-from datetime import datetime
+from datetime import datetime, timedelta
+import uuid
+import os
+import smtplib
+from email.message import EmailMessage
+from dotenv import load_dotenv
 
 from database import get_db
 from models import User, Role
 import auth
+
+# Load environment variables
+load_dotenv()
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -25,6 +33,15 @@ router = APIRouter(
     prefix="/users",
     tags=["users"]
 )
+
+# Email verification settings
+VERIFICATION_TOKEN_EXPIRY_HOURS = int(os.getenv("VERIFICATION_TOKEN_EXPIRY_HOURS", "24"))
+EMAIL_FROM = os.getenv("EMAIL_FROM", "noreply@example.com")
+SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.example.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 # Pydantic models for request/response
 class UserBase(BaseModel):
@@ -144,6 +161,61 @@ def verify_password(plain_password, hashed_password):
 def get_password_hash(password):
     return pwd_context.hash(password)
 
+# Email verification functions
+def generate_verification_token(db: Session, user: User):
+    """Generate a new verification token for a user and save it to the database."""
+    token = str(uuid.uuid4())
+    expiry = datetime.utcnow() + timedelta(hours=VERIFICATION_TOKEN_EXPIRY_HOURS)
+    
+    user.verification_token = token
+    user.verification_token_expires_at = expiry
+    db.commit()
+    
+    return token
+
+def send_verification_email(user_email: str, token: str):
+    """Send a verification email with the given token."""
+    try:
+        verification_url = f"{FRONTEND_URL}/verify-email?token={token}"
+        
+        msg = EmailMessage()
+        msg.set_content(f"""
+        Hello,
+        
+        Please verify your email address by clicking the link below:
+        
+        {verification_url}
+        
+        This link will expire in {VERIFICATION_TOKEN_EXPIRY_HOURS} hours.
+        
+        If you did not sign up for this account, you can ignore this email.
+        
+        Thanks,
+        The AuthPro Team
+        """)
+        
+        msg['Subject'] = 'Verify your email address'
+        msg['From'] = EMAIL_FROM
+        msg['To'] = user_email
+        
+        # For development, just log the email instead of sending
+        if os.getenv("ENVIRONMENT", "development") == "development":
+            print(f"Would send verification email to {user_email} with token {token}")
+            print(f"Verification URL: {verification_url}")
+            return True
+            
+        # Send the email
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            if SMTP_USERNAME and SMTP_PASSWORD:
+                server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(msg)
+            
+        return True
+    except Exception as e:
+        print(f"Error sending verification email: {str(e)}")
+        return False
+
 # Endpoints
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
@@ -160,7 +232,8 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
         email=user.email,
         hashed_password=hashed_password,
         first_name=user.first_name,
-        last_name=user.last_name
+        last_name=user.last_name,
+        is_verified=False  # Default to unverified
     )
     
     # Add default role
@@ -171,6 +244,14 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+    
+    # Generate verification token and send email
+    try:
+        token = generate_verification_token(db, db_user)
+        send_verification_email(db_user.email, token)
+    except Exception as e:
+        print(f"Error sending verification email: {str(e)}")
+        # Continue even if email fails - user is still created
     
     return db_user
 
@@ -295,3 +376,61 @@ def delete_user(
     db.commit()
     
     return None
+
+@router.post("/verify-email", status_code=status.HTTP_200_OK)
+def verify_email(token: dict, db: Session = Depends(get_db)):
+    """Verify a user's email address using a verification token."""
+    verification_token = token.get("token")
+    if not verification_token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification token is required"
+        )
+    
+    # Find user with this token
+    user = db.query(User).filter(
+        User.verification_token == verification_token,
+        User.verification_token_expires_at > datetime.utcnow()
+    ).first()
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token"
+        )
+    
+    # Mark user as verified
+    user.is_verified = True
+    user.verification_token = None
+    user.verification_token_expires_at = None
+    db.commit()
+    
+    return {"message": "Email successfully verified"}
+
+@router.post("/resend-verification", status_code=status.HTTP_200_OK)
+def resend_verification(
+    request: Request,
+    current_user: User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Resend a verification email to the current user."""
+    # Only allow for unverified users
+    if current_user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email is already verified"
+        )
+    
+    # Generate new token
+    token = generate_verification_token(db, current_user)
+    
+    # Send verification email
+    email_sent = send_verification_email(current_user.email, token)
+    
+    if not email_sent:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send verification email"
+        )
+    
+    return {"message": "Verification email sent"}
