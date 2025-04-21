@@ -555,7 +555,17 @@ export default function ProfilePage() {
                       <p className="text-sm text-gray-500">
                         Update your password to keep your account secure
                       </p>
-                      <ChangePasswordForm />
+                      {isEditing ? (
+                        <ChangePasswordForm />
+                      ) : (
+                        <Button
+                          variant="outline"
+                          onClick={toggleEdit}
+                          className="mt-2"
+                        >
+                          Edit to Change Password
+                        </Button>
+                      )}
                     </div>
 
                     <Separator />
