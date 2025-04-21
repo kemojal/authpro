@@ -1,7 +1,8 @@
-from sqlalchemy import Boolean, Column, String, Integer, DateTime, ForeignKey, Table
+from sqlalchemy import Boolean, Column, String, Integer, DateTime, ForeignKey, Table, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 import uuid
+from datetime import datetime
 
 from database import Base
 
@@ -29,9 +30,9 @@ class User(Base):
     
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     email = Column(String, unique=True, index=True)
-    hashed_password = Column(String, nullable=True)  # Nullable for OAuth users
-    first_name = Column(String)
-    last_name = Column(String)
+    hashed_password = Column(String)
+    first_name = Column(String, nullable=True)
+    last_name = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
     
@@ -39,13 +40,17 @@ class User(Base):
     oauth_provider = Column(String, nullable=True)
     oauth_id = Column(String, nullable=True)
     
+    # Email verification fields
+    verification_token = Column(String, nullable=True)
+    verification_token_expires_at = Column(DateTime, nullable=True)
+    
     # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=text('NOW()'))
+    updated_at = Column(DateTime(timezone=True), server_default=text('NOW()'), onupdate=datetime.utcnow)
     last_login = Column(DateTime(timezone=True), nullable=True)
     
     # Relationship with roles
-    roles = relationship("Role", secondary="user_roles", back_populates="users")
+    roles = relationship("Role", secondary=user_roles, back_populates="users")
     
     # Token related fields (for refresh tokens)
     refresh_token = Column(String, nullable=True)

@@ -4,13 +4,21 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
-      - .:/app
-    env_file:
-      - .env
+      - ./backend:/app
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/auth_db
+      - SECRET_KEY=your-secret-key-change-this-in-production
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - REFRESH_TOKEN_EXPIRE_DAYS=7
+      - FRONTEND_URL=http://localhost:3000
+      - SMTP_SERVER=smtp.example.com
+      - SMTP_PORT=587
+      - SMTP_USERNAME=username
+      - SMTP_PASSWORD=password
+      - EMAIL_FROM=admin@example.com
+      - EMAIL_FROM_NAME=AuthPro
     depends_on:
       db:
         condition: service_healthy
@@ -23,14 +31,12 @@ services:
     image: postgres:15
     volumes:
       - postgres_data:/var/lib/postgresql/data/
-    env_file:
-      - .env
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=auth_db
     ports:
-      - "5433:5432"
+      - "5434:5432"
     networks:
       - app-network
     restart: always

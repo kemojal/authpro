@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, Form
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from authlib.integrations.starlette_client import OAuth
@@ -26,7 +26,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 # OAuth2 configuration
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
 
 # Google OAuth setup
 config = Config(environ=os.environ)
@@ -168,18 +168,33 @@ def authenticate_user(db: Session, email: str, password: str):
         
     return user
 
+# Custom login form that uses 'email' instead of 'username'
+class EmailPasswordRequestForm:
+    def __init__(
+        self,
+        email: str = Form(...),
+        password: str = Form(...),
+    ):
+        self.email = email
+        self.password = password
+        # For compatibility with OAuth2PasswordRequestForm
+        self.username = email
+
 # Login endpoints
 @router.post("/token")
 async def login(
     response: Response, 
-    form_data: OAuth2PasswordRequestForm = Depends(), 
+    form_data: EmailPasswordRequestForm = Depends(), 
     db: Session = Depends(get_db)
 ):
-    user = authenticate_user(db, form_data.username, form_data.password)
+    # The form now provides both email and username (username is set to email for compatibility)
+    email = form_data.email
+    
+    user = authenticate_user(db, email, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
+            detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
     

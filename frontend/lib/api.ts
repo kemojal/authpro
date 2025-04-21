@@ -256,7 +256,7 @@ const api = {
         }
 
         const formData = new URLSearchParams({
-          username: email,
+          email: email,
           password: password,
         });
 
@@ -290,6 +290,12 @@ const api = {
 
   updateProfile: (data: ProfileUpdateData) =>
     apiClient.patch("/users/me", data, { withCredentials: true }),
+
+  // Email verification
+  verifyEmail: (token: string) =>
+    apiClient.post("/users/verify-email", { token }),
+
+  resendVerification: () => apiClient.post("/users/resend-verification"),
 
   // Protected routes example
   getProtectedData: () => apiClient.get("/protected"),
