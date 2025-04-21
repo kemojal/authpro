@@ -83,6 +83,11 @@ export default function ProfilePage() {
   const queryClient = useQueryClient();
   const [isEditing, setIsEditing] = useState(false);
 
+  // Refresh user data when component mounts
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+
   // Form setup
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
@@ -203,24 +208,41 @@ export default function ProfilePage() {
                       <span className="text-sm font-medium">
                         Email Verified
                       </span>
-                      {user?.is_verified ? (
-                        <Badge
-                          variant="success"
-                          className="bg-green-100 text-green-800"
-                        >
-                          <CheckCircle className="h-3 w-3 mr-1" /> Verified
-                        </Badge>
-                      ) : (
-                        <div className="flex flex-col items-end">
+                      <div className="flex items-center space-x-1">
+                        {user?.is_verified ? (
                           <Badge
-                            variant="destructive"
-                            className="bg-red-100 text-red-800 mb-1"
+                            variant="success"
+                            className="bg-green-100 text-green-800"
                           >
-                            <XCircle className="h-3 w-3 mr-1" /> Unverified
+                            <CheckCircle className="h-3 w-3 mr-1" /> Verified
                           </Badge>
-                          <ResendVerificationButton />
-                        </div>
-                      )}
+                        ) : (
+                          <div className="flex flex-col items-end">
+                            <Badge
+                              variant="destructive"
+                              className="bg-red-100 text-red-800 mb-1"
+                            >
+                              <XCircle className="h-3 w-3 mr-1" /> Unverified
+                            </Badge>
+                            <div className="flex items-center space-x-1">
+                              <ResendVerificationButton />
+                              <button
+                                onClick={() => {
+                                  fetchUser();
+                                  toast.success("Status refreshed", {
+                                    duration: 2000,
+                                    position: "bottom-right",
+                                  });
+                                }}
+                                className="text-xs text-gray-500 hover:text-gray-700"
+                                title="Refresh verification status"
+                              >
+                                ↻
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between">
@@ -381,26 +403,40 @@ export default function ProfilePage() {
                               <XCircle className="h-5 w-5 text-red-500 mr-2" />
                               <span>Your email is not verified</span>
                             </div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={async () => {
-                                try {
-                                  await api.resendVerification();
+                            <div className="flex space-x-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={async () => {
+                                  try {
+                                    await api.resendVerification();
+                                    toast.success(
+                                      "Verification email sent. Please check your inbox."
+                                    );
+                                  } catch (error: unknown) {
+                                    const errorMessage =
+                                      error instanceof Error
+                                        ? error.message
+                                        : "Failed to resend verification email";
+                                    toast.error(errorMessage);
+                                  }
+                                }}
+                              >
+                                Resend Verification Email
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  fetchUser();
                                   toast.success(
-                                    "Verification email sent. Please check your inbox."
+                                    "Verification status refreshed"
                                   );
-                                } catch (error: unknown) {
-                                  const errorMessage =
-                                    error instanceof Error
-                                      ? error.message
-                                      : "Failed to resend verification email";
-                                  toast.error(errorMessage);
-                                }
-                              }}
-                            >
-                              Resend Verification Email
-                            </Button>
+                                }}
+                              >
+                                Refresh Status
+                              </Button>
+                            </div>
                           </div>
                         )}
                       </div>

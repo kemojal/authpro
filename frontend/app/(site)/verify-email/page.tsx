@@ -14,10 +14,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import api from "@/lib/api";
+import { useAuthStore } from "@/lib/store";
 
 export default function VerifyEmailPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { fetchUser } = useAuthStore();
   const [status, setStatus] = useState<"loading" | "success" | "error">(
     "loading"
   );
@@ -37,6 +39,9 @@ export default function VerifyEmailPage() {
         await api.verifyEmail(token);
         setStatus("success");
         setMessage("Your email has been successfully verified!");
+        
+        // Refresh user data to update verification status
+        await fetchUser();
       } catch (error: any) {
         setStatus("error");
         setMessage(
@@ -47,7 +52,15 @@ export default function VerifyEmailPage() {
     }
 
     verifyEmail();
-  }, [searchParams]);
+  }, [searchParams, fetchUser]);
+
+  // Function to handle going to profile
+  const goToProfile = () => {
+    // Refresh user data again before navigating
+    fetchUser().then(() => {
+      router.push("/profile");
+    });
+  };
 
   return (
     <div className="container max-w-md mx-auto py-16 px-4">
@@ -79,7 +92,7 @@ export default function VerifyEmailPage() {
           </CardContent>
           <CardFooter className="flex justify-center">
             {status !== "loading" && (
-              <Button onClick={() => router.push("/profile")}>
+              <Button onClick={goToProfile}>
                 Go to Profile
               </Button>
             )}
