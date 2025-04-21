@@ -2,23 +2,14 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { z } from "zod";
-import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
+import axios from "axios";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -27,8 +18,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-
-import { useAuthStore } from "@/lib/store";
+import { Input } from "@/components/ui/input";
 import api from "@/lib/api";
 
 const registerSchema = z
@@ -54,7 +44,6 @@ export function RegisterForm() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { login } = useAuthStore();
 
   // Handle form error with useEffect
   useEffect(() => {
@@ -74,45 +63,43 @@ export function RegisterForm() {
     },
   });
 
-  async function onSubmit(data: RegisterFormValues) {
+  const onSubmit = async (data: RegisterFormValues) => {
     setIsLoading(true);
-    setError(null);
-
     try {
-      // Register the user
-      await api.register({
+      // Register user
+      const response = await api.register({
         email: data.email,
         password: data.password,
         first_name: data.firstName,
         last_name: data.lastName,
       });
 
-      // Log in with the new credentials
-      await login(data.email, data.password);
+      if (response.status === 201) {
+        // Login after successful registration
+        try {
+          // The login method returns an AxiosResponse
+          await api.login(data.email, data.password);
 
-      toast.success("Registration successful!");
-      router.push("/dashboard");
-    } catch (err: any) {
-      // Handle different error formats from API
-      let errorMessage = "Registration failed";
-
-      if (err.response) {
-        if (typeof err.response.data === "string") {
-          errorMessage = err.response.data;
-        } else if (err.response.data?.detail) {
-          errorMessage = err.response.data.detail;
-        } else if (err.response.data?.message) {
-          errorMessage = err.response.data.message;
+          toast.success("Your account has been created.");
+          router.push("/verification-pending");
+        } catch (error) {
+          // If login fails, the account was created but we couldn't log in
+          console.log("Login failed after registration:", error);
+          toast.success("Your account has been created. Please log in.");
+          router.push("/login");
         }
-      } else if (err.message) {
-        errorMessage = err.message;
       }
-
-      setError(errorMessage);
+    } catch (error: unknown) {
+      // Show error message
+      if (axios.isAxiosError(error) && error.response) {
+        setError(error.response.data.detail || "Registration failed");
+      } else {
+        setError("An unexpected error occurred");
+      }
     } finally {
       setIsLoading(false);
     }
-  }
+  };
 
   return (
     <div className="w-full">

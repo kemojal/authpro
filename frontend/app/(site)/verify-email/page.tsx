@@ -39,7 +39,7 @@ export default function VerifyEmailPage() {
         await api.verifyEmail(token);
         setStatus("success");
         setMessage("Your email has been successfully verified!");
-        
+
         // Refresh user data to update verification status
         await fetchUser();
       } catch (error: any) {
@@ -54,11 +54,11 @@ export default function VerifyEmailPage() {
     verifyEmail();
   }, [searchParams, fetchUser]);
 
-  // Function to handle going to profile
-  const goToProfile = () => {
+  // Function to handle going to dashboard
+  const goToDashboard = () => {
     // Refresh user data again before navigating
     fetchUser().then(() => {
-      router.push("/profile");
+      router.push("/dashboard");
     });
   };
 
@@ -92,9 +92,7 @@ export default function VerifyEmailPage() {
           </CardContent>
           <CardFooter className="flex justify-center">
             {status !== "loading" && (
-              <Button onClick={goToProfile}>
-                Go to Profile
-              </Button>
+              <Button onClick={goToDashboard}>Go to Dashboard</Button>
             )}
           </CardFooter>
         </Card>
