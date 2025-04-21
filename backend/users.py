@@ -36,11 +36,13 @@ router = APIRouter(
 
 # Email verification settings
 VERIFICATION_TOKEN_EXPIRY_HOURS = int(os.getenv("VERIFICATION_TOKEN_EXPIRY_HOURS", "24"))
-EMAIL_FROM = os.getenv("EMAIL_FROM", "noreply@example.com")
-SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.example.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USERNAME = os.getenv("SMTP_USERNAME", "")
-SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
+# Hardcoded values for SMTP to ensure they work even if env vars aren't loading properly
+SMTP_SERVER = "smtp.gmail.com"  # Hardcoded instead of using env var
+SMTP_PORT = 465  # Gmail SSL port
+EMAIL_FROM = "kemo3855@gmail.com"  # Hardcoded Gmail address
+EMAIL_FROM_NAME = "AuthPro"
+SMTP_USERNAME = "kemo3855@gmail.com"  # Hardcoded Gmail username
+SMTP_PASSWORD = "bmhv cwln qigw vzhc"  # Gmail app password
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 # Pydantic models for request/response
@@ -178,11 +180,106 @@ def send_verification_email(user_email: str, token: str):
     try:
         verification_url = f"{FRONTEND_URL}/verify-email?token={token}"
         
-        msg = EmailMessage()
-        msg.set_content(f"""
+        # Create a professional HTML email template
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Verify Your Email</title>
+            <style>
+                body {{
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    line-height: 1.6;
+                    color: #333333;
+                    margin: 0;
+                    padding: 0;
+                    background-color: #f9f9f9;
+                }}
+                .container {{
+                    max-width: 600px;
+                    margin: 0 auto;
+                    padding: 20px;
+                    background-color: #ffffff;
+                    border-radius: 5px;
+                    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+                }}
+                .header {{
+                    text-align: center;
+                    padding: 20px 0;
+                    border-bottom: 1px solid #f0f0f0;
+                }}
+                .logo {{
+                    color: #4F46E5;
+                    font-size: 28px;
+                    font-weight: 700;
+                    text-decoration: none;
+                }}
+                .content {{
+                    padding: 30px 20px;
+                }}
+                .verify-button {{
+                    display: inline-block;
+                    background-color: #4F46E5;
+                    color: white;
+                    text-decoration: none;
+                    padding: 12px 24px;
+                    border-radius: 5px;
+                    font-weight: 600;
+                    margin: 20px 0;
+                    text-align: center;
+                }}
+                .footer {{
+                    text-align: center;
+                    padding: 20px;
+                    color: #888888;
+                    font-size: 12px;
+                    border-top: 1px solid #f0f0f0;
+                }}
+                .expiry-info {{
+                    color: #666666;
+                    font-size: 14px;
+                    margin-top: 20px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <div class="logo">AuthPro</div>
+                </div>
+                <div class="content">
+                    <h2>Verify Your Email Address</h2>
+                    <p>Hello,</p>
+                    <p>Thank you for signing up with AuthPro. Please verify your email address by clicking the button below:</p>
+                    
+                    <div style="text-align: center;">
+                        <a href="{verification_url}" class="verify-button">Verify Email</a>
+                    </div>
+                    
+                    <p>If the button doesn't work, you can also verify by copying and pasting this link into your browser:</p>
+                    <p style="word-break: break-all; font-size: 14px;"><a href="{verification_url}">{verification_url}</a></p>
+                    
+                    <p class="expiry-info">This link will expire in {VERIFICATION_TOKEN_EXPIRY_HOURS} hours.</p>
+                    
+                    <p>If you did not sign up for an AuthPro account, you can safely ignore this email.</p>
+                    <p>Best regards,<br>The AuthPro Team</p>
+                </div>
+                <div class="footer">
+                    &copy; {datetime.utcnow().year} AuthPro. All rights reserved.<br>
+                    This is an automated message, please do not reply.
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # Create a plain text version as fallback
+        plain_text = f"""
         Hello,
         
-        Please verify your email address by clicking the link below:
+        Thank you for signing up with AuthPro. Please verify your email address by clicking the link below:
         
         {verification_url}
         
@@ -190,30 +287,45 @@ def send_verification_email(user_email: str, token: str):
         
         If you did not sign up for this account, you can ignore this email.
         
-        Thanks,
+        Best regards,
         The AuthPro Team
-        """)
+        """
         
-        msg['Subject'] = 'Verify your email address'
-        msg['From'] = EMAIL_FROM
+        # Debug settings
+        print(f"\n=== EMAIL CONFIGURATION ===")
+        print(f"SMTP_SERVER: {SMTP_SERVER}")
+        print(f"SMTP_PORT: {SMTP_PORT}")
+        print(f"SMTP_USERNAME: {SMTP_USERNAME}")
+        print(f"EMAIL_FROM: {EMAIL_FROM}")
+        
+        msg = EmailMessage()
+        msg.set_content(plain_text)
+        msg.add_alternative(html_content, subtype='html')
+        
+        msg['Subject'] = 'Verify your AuthPro account'
+        formatted_from = f"{EMAIL_FROM_NAME} <{EMAIL_FROM}>"
+        msg['From'] = formatted_from
         msg['To'] = user_email
         
-        # For development, just log the email instead of sending
-        if os.getenv("ENVIRONMENT", "development") == "development":
-            print(f"Would send verification email to {user_email} with token {token}")
-            print(f"Verification URL: {verification_url}")
-            return True
-            
-        # Send the email
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-            server.starttls()
-            if SMTP_USERNAME and SMTP_PASSWORD:
-                server.login(SMTP_USERNAME, SMTP_PASSWORD)
+        # Simplified Gmail handling - just use SSL
+        print(f"Attempting to connect to Gmail via SSL...")
+        import ssl
+        context = ssl.create_default_context()
+        
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context) as server:
+            print(f"SSL connection established, logging in with {SMTP_USERNAME}")
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            print(f"Sending email to: {user_email}")
             server.send_message(msg)
-            
+            print(f"Verification email sent successfully to {user_email}")
+        
         return True
+            
     except Exception as e:
-        print(f"Error sending verification email: {str(e)}")
+        import traceback
+        print(f"ERROR sending verification email: {str(e)}")
+        print("Traceback:")
+        traceback.print_exc()
         return False
 
 # Endpoints
@@ -414,23 +526,44 @@ def resend_verification(
     db: Session = Depends(get_db)
 ):
     """Resend a verification email to the current user."""
+    # Log useful info for debugging
+    print(f"\n=== RESEND VERIFICATION REQUEST ===")
+    print(f"User email: {current_user.email}")
+    print(f"User ID: {current_user.id}")
+    print(f"Is verified: {current_user.is_verified}")
+    
     # Only allow for unverified users
     if current_user.is_verified:
+        print(f"User already verified: {current_user.email}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email is already verified"
         )
     
-    # Generate new token
-    token = generate_verification_token(db, current_user)
-    
-    # Send verification email
-    email_sent = send_verification_email(current_user.email, token)
-    
-    if not email_sent:
+    try:
+        # Generate new token
+        print(f"Generating verification token for user: {current_user.email}")
+        token = generate_verification_token(db, current_user)
+        print(f"Generated token: {token[:8]}...")
+        
+        # Send verification email
+        print(f"Attempting to send verification email to: {current_user.email}")
+        email_sent = send_verification_email(current_user.email, token)
+        
+        if not email_sent:
+            print(f"Failed to send verification email to {current_user.email}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to send verification email. Please try again later or contact support."
+            )
+        
+        print(f"Successfully sent verification email to: {current_user.email}")
+        return {"message": "Verification email sent", "success": True}
+    except Exception as e:
+        import traceback
+        print(f"ERROR in resend_verification: {str(e)}")
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to send verification email"
+            detail="Email service temporarily unavailable. Please try again later."
         )
-    
-    return {"message": "Verification email sent"}
