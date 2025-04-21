@@ -124,8 +124,28 @@ apiClient.interceptors.request.use(
 // Client-side token refresh function
 const performTokenRefresh = async () => {
   try {
-    await apiClient.post("/refresh-token");
-    console.log("Token refreshed via function call");
+    // Get refresh token from localStorage if available
+    const refreshToken = localStorage.getItem("refresh_token");
+    const requestBody = refreshToken ? { refresh_token: refreshToken } : {};
+
+    // Ensure we're sending cookies with the request
+    const response = await apiClient.post("/refresh-token", requestBody, {
+      withCredentials: true, // This ensures cookies are sent with the request
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    console.log("Token refreshed via function call", response.data);
+
+    // Save new tokens if they're returned
+    if (response.data?.access_token) {
+      localStorage.setItem(
+        "access_token",
+        `Bearer ${response.data.access_token}`
+      );
+    }
+
     return true;
   } catch (error) {
     console.error("Token refresh function failed:", error);
@@ -150,11 +170,24 @@ apiClient.interceptors.response.use(
     ) {
       console.log("Login response received, checking for token in response");
       if (response.data?.access_token) {
-        console.log("Saving token to localStorage from response data");
+        console.log("Saving access token to localStorage from response data");
         localStorage.setItem(
           "access_token",
           `Bearer ${response.data.access_token}`
         );
+
+        // Also save refresh token if available from cookies
+        const cookies = document.cookie.split(";");
+        const refreshTokenCookie = cookies.find((cookie) =>
+          cookie.trim().startsWith("refresh_token=")
+        );
+        if (refreshTokenCookie) {
+          const refreshToken = refreshTokenCookie.split("=")[1];
+          if (refreshToken) {
+            console.log("Saving refresh token to localStorage from cookies");
+            localStorage.setItem("refresh_token", refreshToken);
+          }
+        }
       }
     }
 

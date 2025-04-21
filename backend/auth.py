@@ -343,9 +343,40 @@ async def refresh_token(
     request: Request,
     db: Session = Depends(get_db)
 ):
-    # Get refresh token from cookie
+    # Get refresh token from various possible locations
+    refresh_token = None
+    
+    # 1. Check cookies first
     refresh_token = request.cookies.get("refresh_token")
+    
+    # 2. Check Authorization header if no cookie found
     if not refresh_token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            # Try to extract JWT and decode it to see if it has a refresh_token claim
+            try:
+                token = auth_header[7:]
+                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                # If token contains refresh_token field (custom implementation)
+                if "refresh_token" in payload:
+                    refresh_token = payload["refresh_token"]
+            except JWTError:
+                pass
+    
+    # 3. Check request body
+    if not refresh_token:
+        try:
+            body = await request.json()
+            refresh_token = body.get("refresh_token")
+        except:
+            # Body might not be JSON or might be empty
+            pass
+    
+    # Log the token status for debugging
+    if refresh_token:
+        print(f"Found refresh token: {refresh_token[:10]}...")
+    else:
+        print("No refresh token found in cookies, headers, or request body")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token not found",
@@ -372,6 +403,17 @@ async def refresh_token(
         key="access_token",
         value=f"Bearer {access_token}",
         httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        path="/"
+    )
+    
+    # Also set a non-httpOnly cookie for JS access
+    response.set_cookie(
+        key="token_debug",
+        value=f"Bearer {access_token}",
+        httponly=False,
         secure=False,
         samesite="lax",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
