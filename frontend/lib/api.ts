@@ -288,19 +288,57 @@ const api = {
           return;
         }
 
-        const formData = new URLSearchParams({
-          email: email,
-          password: password,
-        });
+        console.log(`Attempting login with credentials - Email: ${email}`);
 
-        const response = await apiClient.post("/token", formData, {
+        // Create form data using username field for email
+        const formData = new URLSearchParams();
+        formData.append("username", email); // FastAPI OAuth2PasswordRequestForm expects 'username'
+        formData.append("password", password);
+
+        // Log the complete request configuration for debugging
+        console.log("Login request configuration:", {
+          url: `${API_URL}/token`,
+          method: "POST",
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
           },
+          withCredentials: true,
+          data: formData.toString(),
         });
 
-        resolve(response);
+        try {
+          const response = await apiClient.post("/token", formData, {
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+          });
+
+          console.log("Login success response:", {
+            status: response.status,
+            statusText: response.statusText,
+            data: response.data ? "Present" : "Missing",
+          });
+
+          resolve(response);
+        } catch (error: any) {
+          // Detailed error logging
+          console.error("Login request failed:", {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data,
+            message: error.message,
+          });
+
+          if (error.response?.status === 401) {
+            reject(new Error("Invalid email or password. Please try again."));
+          } else if (error.response?.status === 422) {
+            reject(new Error("Invalid form data. Please check your inputs."));
+          } else {
+            reject(error);
+          }
+        }
       } catch (error) {
+        console.error("Login error in outer catch:", error);
         reject(error);
       }
     });

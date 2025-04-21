@@ -172,26 +172,62 @@ def authenticate_user(db: Session, email: str, password: str):
 class EmailPasswordRequestForm:
     def __init__(
         self,
-        email: str = Form(...),
+        request: Request,
+        email: str = Form(None),
+        username: str = Form(None),
         password: str = Form(...),
     ):
-        self.email = email
+        # Handle both email and username fields for flexibility
+        self.email = email or username
+        if not self.email:
+            # Try to get email from JSON body as fallback
+            try:
+                body = request.json()
+                self.email = body.get("email") or body.get("username")
+            except:
+                pass
+        
+        # Ensure username is also available for backward compatibility
         self.password = password
-        # For compatibility with OAuth2PasswordRequestForm
-        self.username = email
+        self.username = self.email
+        
+        print(f"EmailPasswordRequestForm initialized with email: {self.email}, username: {self.username}")
 
 # Login endpoints
 @router.post("/token")
 async def login(
     response: Response, 
-    form_data: EmailPasswordRequestForm = Depends(), 
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    # The form now provides both email and username (username is set to email for compatibility)
-    email = form_data.email
+    # Print request information for debugging
+    print(f"Login attempt - Headers: {dict(request.headers)}")
+    content_type = request.headers.get("content-type", "")
+    print(f"Login attempt - Content-Type: {content_type}")
+    
+    # The OAuth2PasswordRequestForm provides username field
+    email = form_data.username
+    print(f"Login attempt - Using email from username field: {email}")
+    
+    if not email:
+        print("Login attempt - No email provided")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Email is required",
+        )
+    
+    # Debug database lookup
+    from users import get_user_by_email
+    user_exists = get_user_by_email(db, email)
+    if user_exists:
+        print(f"User found in database: {email}")
+    else:
+        print(f"User NOT found in database: {email}")
     
     user = authenticate_user(db, email, form_data.password)
     if not user:
+        print(f"Authentication failed for email: {email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
