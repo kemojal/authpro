@@ -45,6 +45,24 @@ const profileFormSchema = z.object({
     .readonly(),
 });
 
+// Schema for password change form
+const passwordFormSchema = z
+  .object({
+    current_password: z
+      .string()
+      .min(1, { message: "Current password is required" }),
+    new_password: z
+      .string()
+      .min(8, { message: "Password must be at least 8 characters" }),
+    confirm_password: z
+      .string()
+      .min(8, { message: "Password confirmation is required" }),
+  })
+  .refine((data) => data.new_password === data.confirm_password, {
+    message: "Passwords do not match",
+    path: ["confirm_password"],
+  });
+
 // ResendVerificationButton component
 function ResendVerificationButton() {
   const [isLoading, setIsLoading] = useState(false);
@@ -73,6 +91,94 @@ function ResendVerificationButton() {
     >
       {isLoading ? "Sending..." : "Resend verification"}
     </button>
+  );
+}
+
+// ChangePasswordForm component
+function ChangePasswordForm() {
+  const [isLoading, setIsLoading] = useState(false);
+
+  const form = useForm<z.infer<typeof passwordFormSchema>>({
+    resolver: zodResolver(passwordFormSchema),
+    defaultValues: {
+      current_password: "",
+      new_password: "",
+      confirm_password: "",
+    },
+  });
+
+  async function onSubmit(data: z.infer<typeof passwordFormSchema>) {
+    setIsLoading(true);
+    try {
+      await api.changePassword(data);
+      toast.success("Password changed successfully");
+      form.reset();
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to change password";
+      toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <FormField
+          control={form.control}
+          name="current_password"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Current Password</FormLabel>
+              <FormControl>
+                <Input type="password" placeholder="••••••••" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="new_password"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>New Password</FormLabel>
+              <FormControl>
+                <Input type="password" placeholder="••••••••" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="confirm_password"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Confirm New Password</FormLabel>
+              <FormControl>
+                <Input type="password" placeholder="••••••••" {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <Button type="submit" disabled={isLoading}>
+          {isLoading ? (
+            <>
+              <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent"></div>
+              Updating...
+            </>
+          ) : (
+            "Change Password"
+          )}
+        </Button>
+      </form>
+    </Form>
   );
 }
 
@@ -444,12 +550,12 @@ export default function ProfilePage() {
 
                     <Separator />
 
-                    <div className="space-y-2">
+                    <div className="space-y-4">
                       <h3 className="text-lg font-medium">Change Password</h3>
                       <p className="text-sm text-gray-500">
                         Update your password to keep your account secure
                       </p>
-                      <Button variant="outline">Change Password</Button>
+                      <ChangePasswordForm />
                     </div>
 
                     <Separator />

@@ -362,6 +362,12 @@ const api = {
   updateProfile: (data: ProfileUpdateData) =>
     apiClient.patch("/users/me", data, { withCredentials: true }),
 
+  changePassword: (data: {
+    current_password: string;
+    new_password: string;
+    confirm_password: string;
+  }) => apiClient.post("/users/change-password", data),
+
   // Email verification
   verifyEmail: (token: string) =>
     apiClient.post("/users/verify-email", { token }),

@@ -139,6 +139,39 @@ class UserUpdate(BaseModel):
                 raise ValueError('Password must be at least 8 characters long')
             return v
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+    confirm_password: str
+    
+    # Validate that passwords match
+    if USE_PYDANTIC_V2:
+        @field_validator('confirm_password')
+        @classmethod
+        def passwords_match(cls, v, values):
+            if 'new_password' in values.data and v != values.data['new_password']:
+                raise ValueError('Passwords do not match')
+            return v
+            
+        @field_validator('new_password')
+        @classmethod
+        def password_strength(cls, v):
+            if len(v) < 8:
+                raise ValueError("Password must be at least 8 characters")
+            return v
+    else:
+        @validator('confirm_password')
+        def passwords_match(cls, v, values):
+            if 'new_password' in values and v != values['new_password']:
+                raise ValueError('Passwords do not match')
+            return v
+            
+        @validator('new_password')
+        def password_strength(cls, v):
+            if len(v) < 8:
+                raise ValueError("Password must be at least 8 characters")
+            return v
+
 # Helper functions
 def get_user(db: Session, user_id: str):
     return db.query(User).filter(User.id == user_id).first()
@@ -567,3 +600,32 @@ def resend_verification(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Email service temporarily unavailable. Please try again later."
         )
+
+@router.post("/change-password", status_code=status.HTTP_200_OK)
+def change_password(
+    password_data: ChangePasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(auth.get_current_user)
+):
+    """Change the user's password, requiring the current password for verification."""
+    
+    # Verify current password
+    if not verify_password(password_data.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect"
+        )
+    
+    # Verify new password is different
+    if password_data.current_password == password_data.new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be different from current password"
+        )
+    
+    # Update password
+    current_user.hashed_password = get_password_hash(password_data.new_password)
+    db.commit()
+    
+    return {"message": "Password changed successfully"}
