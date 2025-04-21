@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -64,18 +64,32 @@ export default function ProfilePage() {
   });
 
   // Reset form when user data changes
-  if (
-    user &&
-    (user.first_name !== form.getValues().first_name ||
-      user.last_name !== form.getValues().last_name ||
-      user.email !== form.getValues().email)
-  ) {
-    form.reset({
-      first_name: user.first_name || "",
-      last_name: user.last_name || "",
-      email: user.email || "",
-    });
-  }
+  // if (
+  //   user &&
+  //   (user.first_name !== form.getValues().first_name ||
+  //     user.last_name !== form.getValues().last_name ||
+  //     user.email !== form.getValues().email)
+  // ) {
+  //   form.reset({
+  //     first_name: user.first_name || "",
+  //     last_name: user.last_name || "",
+  //     email: user.email || "",
+  //   });
+  // }
+  useEffect(() => {
+    if (
+      user &&
+      (user.first_name !== form.getValues().first_name ||
+        user.last_name !== form.getValues().last_name ||
+        user.email !== form.getValues().email)
+    ) {
+      form.reset({
+        first_name: user.first_name || "",
+        last_name: user.last_name || "",
+        email: user.email || "",
+      });
+    }
+  }, [user]);
 
   // Update profile mutation
   const mutation = useMutation({
