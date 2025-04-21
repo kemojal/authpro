@@ -194,108 +194,144 @@ class EmailPasswordRequestForm:
         print(f"EmailPasswordRequestForm initialized with email: {self.email}, username: {self.username}")
 
 # Login endpoints
-@router.post("/token")
-async def login(
-    response: Response, 
+@router.post("/token", response_model=dict)
+async def login_for_access_token(
+    response: Response,
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
-    # Print request information for debugging
-    print(f"Login attempt - Headers: {dict(request.headers)}")
-    content_type = request.headers.get("content-type", "")
-    print(f"Login attempt - Content-Type: {content_type}")
+    """
+    OAuth2 compatible token login, get an access token for future requests
+    """
+    print(f"\n=== LOGIN ATTEMPT ===")
+    print(f"Username/Email: {form_data.username}")
     
-    # The OAuth2PasswordRequestForm provides username field
-    email = form_data.username
-    print(f"Login attempt - Using email from username field: {email}")
-    
-    if not email:
-        print("Login attempt - No email provided")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Email is required",
-        )
-    
-    # Debug database lookup
-    from users import get_user_by_email
-    user_exists = get_user_by_email(db, email)
-    if user_exists:
-        print(f"User found in database: {email}")
-    else:
-        print(f"User NOT found in database: {email}")
-    
-    user = authenticate_user(db, email, form_data.password)
+    # First, authenticate the user with username/password
+    user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
-        print(f"Authentication failed for email: {email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
+            detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+        
+    print(f"Login successful for: {user.email} | User ID: {user.id}")
     
-    # Record login time
-    user.last_login = datetime.utcnow()
+    # Create access token
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.id}, expires_delta=access_token_expires
+    )
+    
+    # Create refresh token
+    refresh_token_expires = timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    refresh_token = str(uuid.uuid4())
+    
+    # Store refresh token in database
+    user.refresh_token = refresh_token
+    user.refresh_token_expires_at = datetime.utcnow() + refresh_token_expires
     db.commit()
     
-    # Create tokens
-    access_token = create_access_token(data={"sub": user.id})
-    refresh_token = create_refresh_token(user.id, db)
-    
-    # Get environment
-    is_dev = os.getenv("ENVIRONMENT", "development") == "development"
-    
-    # Get the client's origin from the request header
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-    
-    # Log what we're doing for debugging
-    print(f"Setting cookies for user {user.email}, token: {access_token[:15]}..., is_dev: {is_dev}, frontend_url: {frontend_url}")
-    
-    # Set access token in cookie - with very permissive settings for development
+    # Set cookies for tokens - httponly for security
     response.set_cookie(
-        key="access_token",
+        key="access_token", 
         value=f"Bearer {access_token}",
         httponly=True,
-        secure=False,  # False for development to work with http
+        max_age=access_token_expires.total_seconds(),
+        expires=access_token_expires.total_seconds(),
         samesite="lax",
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        path="/",
-        domain=None  # Allow cookies to work on localhost
+        secure=False,  # Set to True in production with HTTPS
     )
     
-    # Also set in a non-httpOnly cookie for debugging and JS access
     response.set_cookie(
-        key="token_debug",
-        value=f"Bearer {access_token}",
-        httponly=False,
-        secure=False,
-        samesite="lax",
-        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        path="/"
-    )
-    
-    # Set refresh token in cookie
-    response.set_cookie(
-        key="refresh_token",
+        key="refresh_token", 
         value=refresh_token,
         httponly=True,
-        secure=False,  # False for development to work with http
+        max_age=refresh_token_expires.total_seconds(),
+        expires=refresh_token_expires.total_seconds(),
         samesite="lax",
-        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
-        path="/",
-        domain=None  # Allow cookies to work on localhost
+        secure=False,  # Set to True in production with HTTPS
     )
     
-    # Log the token for debugging
-    print(f"Login successful for {user.email}, token set")
-    print(f"Access token: {access_token[:15]}...")
+    # For debugging, also set a non-httponly cookie to see in JS
+    response.set_cookie(
+        key="token_debug", 
+        value=f"Bearer {access_token}",
+        httponly=False,
+        max_age=access_token_expires.total_seconds(),
+        expires=access_token_expires.total_seconds(),
+        samesite="lax",
+        secure=False,
+    )
     
-    # Return a detailed success response with the token info
+    # Check if 2FA is enabled
+    requires_2fa = user.is_2fa_enabled
+    
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "user_id": user.id,
-        "email": user.email
+        "requires_2fa": requires_2fa
+    }
+
+@router.post("/2fa/login-verify", response_model=dict)
+async def verify_2fa_login(
+    request: Request,
+    verify_data: dict,
+    db: Session = Depends(get_db)
+):
+    """
+    Verify 2FA code during login process
+    """
+    user_id = verify_data.get("user_id")
+    code = verify_data.get("code")
+    
+    if not user_id or not code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User ID and verification code are required"
+        )
+    
+    # Get user
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Check if 2FA is enabled
+    if not user.is_2fa_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Two-factor authentication is not enabled for this user"
+        )
+    
+    # Verify code
+    import pyotp
+    totp = pyotp.TOTP(user.totp_secret)
+    
+    # Check TOTP code
+    if not totp.verify(code):
+        # Check backup codes
+        import json
+        backup_codes = json.loads(user.backup_codes or '[]')
+        if code not in backup_codes:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid verification code"
+            )
+        
+        # Remove the used backup code
+        backup_codes.remove(code)
+        user.backup_codes = json.dumps(backup_codes)
+        db.commit()
+    
+    # 2FA verification successful
+    return {
+        "success": True,
+        "message": "Two-factor authentication successful"
     }
 
 # Google OAuth routes

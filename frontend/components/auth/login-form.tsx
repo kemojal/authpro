@@ -39,10 +39,83 @@ const loginSchema = z.object({
 
 type LoginFormValues = z.infer<typeof loginSchema>;
 
+// Add a 2FA verification dialog
+function TwoFactorVerificationDialog() {
+  const [code, setCode] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const { verify2FALogin, error, clearError } = useAuthStore();
+  const router = useRouter();
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      await verify2FALogin(code);
+      // If successful, redirect to dashboard
+      router.push("/dashboard");
+    } catch (err) {
+      // Error state is handled by the store
+      console.error("2FA verification error:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="w-full">
+      <div className="mb-4 text-center">
+        <h2 className="text-xl font-bold mb-2">Two-Factor Authentication</h2>
+        <p className="text-sm text-gray-500">
+          Enter the verification code from your authenticator app
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="2fa-code">Verification Code</Label>
+          <Input
+            id="2fa-code"
+            type="text"
+            placeholder="000000"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            className="h-11 px-4 bg-background/50 dark:bg-background/30 border-border/60 focus:border-primary/60 transition-all duration-200 rounded-lg"
+            maxLength={6}
+            required
+          />
+        </div>
+
+        <motion.div whileTap={{ scale: 0.98 }} className="pt-2">
+          <Button
+            type="submit"
+            className="w-full h-11 font-medium rounded-lg bg-primary hover:bg-primary/90 transition-all duration-200 shadow-[0_0_0_0_rgba(0,0,0,0)] hover:shadow-[0_4px_16px_rgba(0,0,0,0.1)]"
+            disabled={isLoading || code.length < 6}
+          >
+            {isLoading ? (
+              <div className="flex items-center gap-2">
+                <div className="h-4 w-4 rounded-full border-2 border-primary-foreground/30 border-t-primary-foreground animate-spin"></div>
+                <span>Verifying...</span>
+              </div>
+            ) : (
+              "Verify & Continue"
+            )}
+          </Button>
+        </motion.div>
+      </form>
+    </div>
+  );
+}
+
 export function LoginForm() {
   const router = useRouter();
-  const { login, loginWithGoogle, error, isLoading, clearError } =
-    useAuthStore();
+  const {
+    login,
+    loginWithGoogle,
+    error,
+    isLoading,
+    clearError,
+    loginVerificationRequired,
+  } = useAuthStore();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -158,6 +231,11 @@ export function LoginForm() {
     } catch (error) {
       // Error is handled by the store
     }
+  }
+
+  // If 2FA verification is required, show the verification dialog
+  if (loginVerificationRequired) {
+    return <TwoFactorVerificationDialog />;
   }
 
   return (

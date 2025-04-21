@@ -63,6 +63,11 @@ const passwordFormSchema = z
     path: ["confirm_password"],
   });
 
+// Schema for 2FA verification form
+const twoFactorVerifySchema = z.object({
+  code: z.string().min(6, { message: "Code must be at least 6 characters" }),
+});
+
 // ResendVerificationButton component
 function ResendVerificationButton() {
   const [isLoading, setIsLoading] = useState(false);
@@ -180,6 +185,306 @@ function ChangePasswordForm() {
       </form>
     </Form>
   );
+}
+
+// TwoFactorAuthSection component
+function TwoFactorAuthSection() {
+  const { user, fetchUser } = useAuthStore();
+  const [isLoading, setIsLoading] = useState(false);
+  const [step, setStep] = useState<"initial" | "setup" | "verify" | "disable">(
+    "initial"
+  );
+  const [twoFactorData, setTwoFactorData] = useState<{
+    secret: string;
+    qr_code: string;
+    backup_codes: string[];
+  } | null>(null);
+
+  // Verification form
+  const verifyForm = useForm<z.infer<typeof twoFactorVerifySchema>>({
+    resolver: zodResolver(twoFactorVerifySchema),
+    defaultValues: {
+      code: "",
+    },
+  });
+
+  const disableForm = useForm<z.infer<typeof twoFactorVerifySchema>>({
+    resolver: zodResolver(twoFactorVerifySchema),
+    defaultValues: {
+      code: "",
+    },
+  });
+
+  // Enable 2FA
+  const handleEnable2FA = async () => {
+    setIsLoading(true);
+    try {
+      const response = await api.enable2FA();
+      setTwoFactorData(response.data);
+      setStep("setup");
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to enable 2FA";
+      toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Verify 2FA
+  const onVerifySubmit = async (
+    data: z.infer<typeof twoFactorVerifySchema>
+  ) => {
+    setIsLoading(true);
+    try {
+      await api.verify2FA(data.code);
+      toast.success("Two-factor authentication enabled successfully");
+      fetchUser();
+      setStep("initial");
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to verify code";
+      toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Disable 2FA
+  const onDisableSubmit = async (
+    data: z.infer<typeof twoFactorVerifySchema>
+  ) => {
+    setIsLoading(true);
+    try {
+      await api.disable2FA(data.code);
+      toast.success("Two-factor authentication disabled successfully");
+      fetchUser();
+      setStep("initial");
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to disable 2FA";
+      toast.error(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Reset state when changing steps
+  const resetState = () => {
+    setTwoFactorData(null);
+    verifyForm.reset();
+    disableForm.reset();
+    setStep("initial");
+  };
+
+  // Initial 2FA status and button
+  if (step === "initial") {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-medium">Two-Factor Authentication</h3>
+            <p className="text-sm text-gray-500">
+              Add an extra layer of security to your account
+            </p>
+          </div>
+          <Badge
+            variant={user?.is_2fa_enabled ? "success" : "outline"}
+            className={
+              user?.is_2fa_enabled ? "bg-green-100 text-green-800" : ""
+            }
+          >
+            {user?.is_2fa_enabled ? "Enabled" : "Disabled"}
+          </Badge>
+        </div>
+
+        {user?.is_2fa_enabled ? (
+          <Button
+            variant="destructive"
+            onClick={() => setStep("disable")}
+            size="sm"
+          >
+            Disable 2FA
+          </Button>
+        ) : (
+          <Button
+            variant="default"
+            onClick={handleEnable2FA}
+            disabled={isLoading}
+            size="sm"
+          >
+            {isLoading ? (
+              <>
+                <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent"></div>
+                Processing...
+              </>
+            ) : (
+              "Enable 2FA"
+            )}
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  // 2FA setup step with QR code and secret
+  if (step === "setup" && twoFactorData) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <h3 className="text-lg font-medium">
+            Set Up Two-Factor Authentication
+          </h3>
+          <p className="text-sm text-gray-500 mb-4">
+            Scan the QR code with an authenticator app like Google Authenticator
+            or Authy
+          </p>
+
+          <div className="flex flex-col items-center mb-4">
+            <div className="p-4 bg-white rounded-lg mb-2">
+              <img
+                src={twoFactorData.qr_code}
+                alt="QR Code for 2FA"
+                className="w-48 h-48"
+              />
+            </div>
+            <p className="text-sm text-gray-500 mt-2">
+              Or enter this code manually:{" "}
+              <code className="bg-gray-100 px-2 py-1 rounded">
+                {twoFactorData.secret}
+              </code>
+            </p>
+          </div>
+
+          <div className="mb-4">
+            <h4 className="text-md font-medium mb-2">Backup Codes</h4>
+            <p className="text-sm text-gray-500 mb-2">
+              Save these backup codes in a secure place. You can use them to
+              access your account if you lose your device.
+            </p>
+            <div className="grid grid-cols-2 gap-2 p-3 bg-gray-50 rounded-md">
+              {twoFactorData.backup_codes.map((code, index) => (
+                <code key={index} className="text-sm">
+                  {code}
+                </code>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex space-x-2 mt-4">
+            <Button variant="default" onClick={() => setStep("verify")}>
+              Next
+            </Button>
+            <Button variant="outline" onClick={resetState}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2FA verification step
+  if (step === "verify") {
+    return (
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium">Verify Your Authenticator</h3>
+        <p className="text-sm text-gray-500">
+          Enter the verification code from your authenticator app
+        </p>
+
+        <Form {...verifyForm}>
+          <form
+            onSubmit={verifyForm.handleSubmit(onVerifySubmit)}
+            className="space-y-4"
+          >
+            <FormField
+              control={verifyForm.control}
+              name="code"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Authentication Code</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Enter 6-digit code" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="flex space-x-2">
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent"></div>
+                    Verifying...
+                  </>
+                ) : (
+                  "Verify & Enable"
+                )}
+              </Button>
+              <Button variant="outline" onClick={resetState}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </div>
+    );
+  }
+
+  // 2FA disable step
+  if (step === "disable") {
+    return (
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium">
+          Disable Two-Factor Authentication
+        </h3>
+        <p className="text-sm text-gray-500">
+          Enter the verification code from your authenticator app to disable 2FA
+        </p>
+
+        <Form {...disableForm}>
+          <form
+            onSubmit={disableForm.handleSubmit(onDisableSubmit)}
+            className="space-y-4"
+          >
+            <FormField
+              control={disableForm.control}
+              name="code"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Authentication Code</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Enter 6-digit code" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="flex space-x-2">
+              <Button type="submit" variant="destructive" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-background border-t-transparent"></div>
+                    Processing...
+                  </>
+                ) : (
+                  "Disable 2FA"
+                )}
+              </Button>
+              <Button variant="outline" onClick={resetState}>
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
@@ -570,15 +875,7 @@ export default function ProfilePage() {
 
                     <Separator />
 
-                    <div className="space-y-2">
-                      <h3 className="text-lg font-medium">
-                        Two-Factor Authentication
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        Add an extra layer of security to your account
-                      </p>
-                      <Button variant="outline">Enable 2FA</Button>
-                    </div>
+                    <TwoFactorAuthSection />
 
                     <Separator />
 

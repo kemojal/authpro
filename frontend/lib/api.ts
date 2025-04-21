@@ -378,6 +378,18 @@ const api = {
   getProtectedData: () => apiClient.get("/protected"),
 
   getAdminData: () => apiClient.get("/admin"),
+
+  // Two-Factor Authentication
+  get2FAStatus: () => apiClient.get("/users/2fa/status"),
+
+  enable2FA: () => apiClient.post("/users/2fa/enable"),
+
+  verify2FA: (code: string) => apiClient.post("/users/2fa/verify", { code }),
+
+  disable2FA: (code: string) => apiClient.post("/users/2fa/disable", { code }),
+
+  verify2FALogin: (userId: string, code: string) =>
+    apiClient.post("/2fa/login-verify", { user_id: userId, code }),
 };
 
 export default api;

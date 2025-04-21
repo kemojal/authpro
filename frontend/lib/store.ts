@@ -8,6 +8,7 @@ interface User {
   first_name?: string;
   last_name?: string;
   is_verified: boolean;
+  is_2fa_enabled?: boolean;
   oauth_provider?: string;
   roles: Array<{ name: string }>;
 }
@@ -17,7 +18,10 @@ interface AuthState {
   isLoading: boolean;
   isAuthenticated: boolean;
   error: string | null;
+  loginVerificationRequired: boolean;
+  pendingUserId: string | null;
   login: (email: string, password: string) => Promise<void>;
+  verify2FALogin: (code: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   fetchUser: () => Promise<void>;
@@ -79,10 +83,17 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       isAuthenticated: false,
       error: null,
+      loginVerificationRequired: false,
+      pendingUserId: null,
 
       login: async (email: string, password: string) => {
         // Clear state before starting
-        set({ isLoading: true, error: null });
+        set({
+          isLoading: true,
+          error: null,
+          loginVerificationRequired: false,
+          pendingUserId: null,
+        });
 
         // Set a login timeout to prevent hanging
         const loginTimeout = setTimeout(() => {
@@ -92,6 +103,8 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
             user: null,
             isAuthenticated: false,
+            loginVerificationRequired: false,
+            pendingUserId: null,
           });
         }, 10000); // 10 second timeout as a fallback safety
 
@@ -109,6 +122,7 @@ export const useAuthStore = create<AuthState>()(
               access_token?: string;
               user_id?: string;
               email?: string;
+              requires_2fa?: boolean;
             };
           }
 
@@ -121,6 +135,7 @@ export const useAuthStore = create<AuthState>()(
             accessToken: typedResponse.data?.access_token
               ? "Present"
               : "Missing",
+            requires2FA: typedResponse.data?.requires_2fa,
             cookies: document.cookie
               ? document.cookie.substring(0, 60) + "..."
               : "None",
@@ -128,6 +143,16 @@ export const useAuthStore = create<AuthState>()(
 
           // Clear the timeout since we got a response
           clearTimeout(loginTimeout);
+
+          // Check if 2FA is required
+          if (typedResponse.data?.requires_2fa && typedResponse.data?.user_id) {
+            set({
+              isLoading: false,
+              loginVerificationRequired: true,
+              pendingUserId: typedResponse.data.user_id,
+            });
+            return; // Stop the login process here and wait for 2FA verification
+          }
 
           // Add a small delay to ensure cookies are properly set
           await new Promise((resolve) => setTimeout(resolve, 800));
@@ -157,6 +182,8 @@ export const useAuthStore = create<AuthState>()(
               user: userData,
               isAuthenticated: true,
               isLoading: false,
+              loginVerificationRequired: false,
+              pendingUserId: null,
             });
           } catch (userError: unknown) {
             console.error("Error fetching user data:", userError);
@@ -179,6 +206,8 @@ export const useAuthStore = create<AuthState>()(
                 user: partialUserData,
                 isAuthenticated: true,
                 isLoading: false,
+                loginVerificationRequired: false,
+                pendingUserId: null,
               });
             } else {
               throw userError; // Re-throw if we can't even get minimal user data
@@ -210,6 +239,44 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
             user: null,
             isAuthenticated: false,
+            loginVerificationRequired: false,
+            pendingUserId: null,
+          });
+          throw error;
+        }
+      },
+
+      verify2FALogin: async (code: string) => {
+        const { pendingUserId } = get();
+
+        if (!pendingUserId) {
+          set({
+            error: "No pending login to verify",
+            isLoading: false,
+          });
+          throw new Error("No pending login to verify");
+        }
+
+        set({ isLoading: true, error: null });
+
+        try {
+          // Verify the 2FA code
+          await api.verify2FALogin(pendingUserId, code);
+
+          // If verification is successful, fetch user data
+          const { data: userData } = await api.getCurrentUser();
+
+          set({
+            user: userData,
+            isAuthenticated: true,
+            isLoading: false,
+            loginVerificationRequired: false,
+            pendingUserId: null,
+          });
+        } catch (error: unknown) {
+          set({
+            error: extractErrorMessage(error),
+            isLoading: false,
           });
           throw error;
         }

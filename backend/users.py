@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 try:
     # Pydantic V2
     from pydantic import BaseModel, EmailStr, field_validator
@@ -17,6 +17,11 @@ import os
 import smtplib
 from email.message import EmailMessage
 from dotenv import load_dotenv
+import json
+import pyotp
+import qrcode
+import io
+import base64
 
 from database import get_db
 from models import User, Role
@@ -89,6 +94,8 @@ class UserResponse(UserBase):
     is_verified: bool = False
     created_at: datetime
     roles: List[RoleResponse] = []
+    oauth_provider: Optional[str] = None
+    is_2fa_enabled: bool = False
     
     # Model config compatible with both V1 and V2
     if USE_PYDANTIC_V2:
@@ -171,6 +178,19 @@ class ChangePasswordRequest(BaseModel):
             if len(v) < 8:
                 raise ValueError("Password must be at least 8 characters")
             return v
+
+# 2FA models
+class Enable2FAResponse(BaseModel):
+    secret: str
+    qr_code: str
+    backup_codes: List[str]
+
+class Verify2FARequest(BaseModel):
+    code: str
+
+class Verify2FAResponse(BaseModel):
+    success: bool
+    message: str
 
 # Helper functions
 def get_user(db: Session, user_id: str):
@@ -629,3 +649,160 @@ def change_password(
     db.commit()
     
     return {"message": "Password changed successfully"}
+
+# Generate TOTP secret and QR code
+def generate_totp_secret(user_email: str) -> dict:
+    # Generate a random TOTP secret
+    secret = pyotp.random_base32()
+    
+    # Create a TOTP object
+    totp = pyotp.TOTP(secret)
+    
+    # Generate the provisioning URI for the QR code
+    provisioning_uri = totp.provisioning_uri(name=user_email, issuer_name="AuthPro")
+    
+    # Generate QR code
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(provisioning_uri)
+    qr.make(fit=True)
+    
+    img = qr.make_image(fill_color="black", back_color="white")
+    
+    # Convert image to base64 for display
+    buffer = io.BytesIO()
+    img.save(buffer)
+    qr_code_base64 = base64.b64encode(buffer.getvalue()).decode()
+    
+    # Generate backup codes (8 codes, 8 digits each)
+    backup_codes = []
+    for _ in range(8):
+        backup_codes.append(str(uuid.uuid4())[:8])
+    
+    return {
+        "secret": secret,
+        "qr_code": f"data:image/png;base64,{qr_code_base64}",
+        "backup_codes": backup_codes
+    }
+
+# Verify TOTP code
+def verify_totp(secret: str, code: str) -> bool:
+    totp = pyotp.TOTP(secret)
+    return totp.verify(code)
+
+# 2FA Endpoints
+@router.post("/2fa/enable", response_model=Enable2FAResponse)
+def enable_2fa(
+    request: Request,
+    current_user: User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Generate 2FA credentials for the user."""
+    
+    # Check if 2FA is already enabled
+    if current_user.is_2fa_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Two-factor authentication is already enabled"
+        )
+    
+    # Generate TOTP secret and QR code
+    totp_data = generate_totp_secret(current_user.email)
+    
+    # Store the secret and backup codes (they will be confirmed during verification)
+    current_user.totp_secret = totp_data["secret"]
+    current_user.backup_codes = json.dumps(totp_data["backup_codes"])
+    db.commit()
+    
+    return Enable2FAResponse(
+        secret=totp_data["secret"],
+        qr_code=totp_data["qr_code"],
+        backup_codes=totp_data["backup_codes"]
+    )
+
+@router.post("/2fa/verify", response_model=Verify2FAResponse)
+def verify_2fa(
+    verify_data: Verify2FARequest,
+    request: Request,
+    current_user: User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Verify and enable 2FA with the provided code."""
+    
+    # Check if 2FA is already enabled
+    if current_user.is_2fa_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Two-factor authentication is already enabled"
+        )
+    
+    # Verify the provided code
+    if not verify_totp(current_user.totp_secret, verify_data.code):
+        # Check if it matches any backup code
+        backup_codes = json.loads(current_user.backup_codes or '[]')
+        if verify_data.code not in backup_codes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid verification code"
+            )
+    
+    # Enable 2FA for the user
+    current_user.is_2fa_enabled = True
+    db.commit()
+    
+    return Verify2FAResponse(
+        success=True,
+        message="Two-factor authentication has been enabled"
+    )
+
+@router.post("/2fa/disable", response_model=Verify2FAResponse)
+def disable_2fa(
+    verify_data: Verify2FARequest,
+    request: Request,
+    current_user: User = Depends(auth.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Disable 2FA with the provided code."""
+    
+    # Check if 2FA is enabled
+    if not current_user.is_2fa_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Two-factor authentication is not enabled"
+        )
+    
+    # Verify the provided code
+    if not verify_totp(current_user.totp_secret, verify_data.code):
+        # Check if it matches any backup code
+        backup_codes = json.loads(current_user.backup_codes or '[]')
+        if verify_data.code not in backup_codes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid verification code"
+            )
+    
+    # Disable 2FA for the user
+    current_user.is_2fa_enabled = False
+    current_user.totp_secret = None
+    current_user.backup_codes = None
+    db.commit()
+    
+    return Verify2FAResponse(
+        success=True,
+        message="Two-factor authentication has been disabled"
+    )
+
+@router.get("/2fa/status", response_model=dict)
+def get_2fa_status(
+    request: Request,
+    current_user: User = Depends(auth.get_current_user)
+):
+    """Get the current 2FA status of the user."""
+    
+    return {
+        "is_enabled": current_user.is_2fa_enabled
+    }

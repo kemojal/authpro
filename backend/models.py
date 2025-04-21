@@ -55,3 +55,8 @@ class User(Base):
     # Token related fields (for refresh tokens)
     refresh_token = Column(String, nullable=True)
     refresh_token_expires_at = Column(DateTime, nullable=True)
+
+    # Two-Factor Authentication fields
+    is_2fa_enabled = Column(Boolean, default=False)
+    totp_secret = Column(String, nullable=True)
+    backup_codes = Column(String, nullable=True)  # Stored as JSON string
